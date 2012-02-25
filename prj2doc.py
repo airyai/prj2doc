@@ -161,9 +161,6 @@ def scan_dir(path, file_list):
 INPUTS = []
 print ('正在扫描目录下的所有源文件...')
 scan_dir('.', INPUTS)
-if (len(INPUTS) == 0):
-    print ('没有找到任何输入文件。')
-    sys.exit(0)
 
 # check Makefile
 phrase_map = {}
@@ -276,6 +273,8 @@ def front_tab_to_space(x):
 for i in INPUTS:
     try:
         cnt = readfile(i)
+        if (len(cnt) == 0):
+            continue
         CONTENTS[i] = cnt
     except Exception as ex:
         print ('无法读取源文件 {0}：{1}。'.format(i, ex))
@@ -287,11 +286,18 @@ for i in INPUTS:
     except ClassNotFound:
         print ('不能确定源文件 {0} 的语法类型。'.format(i))
         #sys.exit(13)
+        
+if (len(CONTENTS) == 0):
+    print ('没有找到任何非空输入文件。')
+    sys.exit(0)
 
 # generating sources for each file
 CHARDET_REPLACE = {'gb2312': 'gb18030', 'gbk': 'gb18030'}
 def detect_encoding(cnt):
-    ret = chardet.detect(cnt)['encoding'].lower()
+    ret = chardet.detect(cnt)['encoding']
+    if (ret is None):
+        ret = sys.getfilesystemencoding()
+    ret = ret.lower()
     return CHARDET_REPLACE.get(ret, ret)
 
 HIGHLIGHTS = {o:[] for o in OUTPUT}
