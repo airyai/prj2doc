@@ -1,0 +1,2 @@
+Windows 用户：请下载 https://github.com/downloads/airyai/prj2doc/prj2doc.7z
+Linux 用户：下载 prj2doc.py，并且使用 pip 安装 chardet 和 pygments 模块。
