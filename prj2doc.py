@@ -19,7 +19,7 @@ import codecs
 import chardet
 from pygments import highlight
 from pygments.lexers import guess_lexer_for_filename
-from pygments.formatters import get_formatter_for_filename
+from pygments.formatters import get_formatter_for_filename, HtmlFormatter
 from pygments.styles import get_style_by_name, get_all_styles
 from pygments.util import ClassNotFound
 
@@ -34,7 +34,7 @@ DEFAULT_COMMENT_START = '//'
 COMMENT_STARTS = {}
 COMMENT_STARTS['Python'] = '#'
 COMMENT_STARTS['Makefile'] = '#' 
-COMMENT_STARTS['VB.net'] = 'REM'
+COMMENT_STARTS['VB.net'] = '\''
 
 FILE_HEADER_TEMPLATE = '''
 文件：{filename}
@@ -74,9 +74,9 @@ def writefile(path, cnt):
         f.write(cnt.encode('utf-8'))
 
 # parse arguments
-SHORT_OPT_PATTERN = 'ho:s:m:l'
+SHORT_OPT_PATTERN = 'ho:s:m:l:'
 LONG_OPT_PATTERN = ('output=', 'style=', 'makefile=', 'help', 'list-style',
-                    'linenos')
+                    'linenos=')
 def usage():
     print ('Usage: prj2doc [选项] ... [输入通配符] ...')
     print ('Written by 平芜泫 <airyai@gmail.com>。')
@@ -93,7 +93,7 @@ def usage():
     print ('  -m, --makefile=       指定一个 Makefile 文件。')
     print ('  -s, --style=          设定代码高亮的配色方案。默认为 colorful。')
     print ('      --list-style           列出所有支持的配色方案。')
-    print ('  -l, --lineno          为源文件的每一行添加行号。')
+    print ('  -l, --lineno=[on/off] 打开或关闭源文件每一行的行号。')
     print ('  -h, --help            显示这个信息。')
     
 def listStyles():
@@ -105,6 +105,8 @@ MKPATTERN = '*Makefile*'
 MAKEFILE = None
 STYLE = 'colorful'
 LINENOS = True
+def GET_LINENOS(fmt):
+    return True if LINENOS else False
 
 for (k, v) in optlist:
     if (k in ('-o', '--output=')):
@@ -114,8 +116,8 @@ for (k, v) in optlist:
     elif (k in ('--list-style')):
         listStyles()
         sys.exit(0)
-    elif (k in ('-l', '--lineno')):
-        LINENOS = True
+    elif (k in ('-l', '--lineno=')):
+        LINENOS = (v == 'on')
     elif (k in ('-m', '--makefile=')):
         MKPATTERN = v
     elif (k in ('-h', '--help')):
@@ -127,8 +129,8 @@ if (len(PATTERNS) == 0):
     PATTERNS = DEFAULT_PATTERNS
 if (len(OUTPUT) == 0):
     OUTPUT = ['project.html']
-if (sys.platform == 'WINNT'):
-	OUTPUT.append('project.doc')
+if (sys.platform == 'win32'):
+    OUTPUT.append('project.doc')
 
 # scan input files
 FORBIDS = ('prj2doc*', )
@@ -157,7 +159,11 @@ def scan_dir(path, file_list):
         scan_dir(p2, file_list)
 
 INPUTS = []
+print ('正在扫描目录下的所有源文件...')
 scan_dir('.', INPUTS)
+if (len(INPUTS) == 0):
+    print ('没有找到任何输入文件。')
+    sys.exit(0)
 
 # check Makefile
 phrase_map = {}
@@ -242,6 +248,7 @@ FORMATTERS = {}
 CONTENTS = {}
 LEXERS = {}
 
+print ('读取源文件，并载入代码高亮引擎...')
 try:
     STYLE = get_style_by_name(STYLE)
 except ClassNotFound:
@@ -253,9 +260,8 @@ for o in OUTPUT:
         f = get_formatter_for_filename(o)
         f.style = STYLE
         f.encoding = 'utf-8'
-        f.noclasses = True
-        f.nobackground = True
-        #f.line_number = LINENOS
+        #f.noclasses = True
+        #f.nobackground = True
         FORMATTERS[o] = f
     except ClassNotFound:
         print ('不支持的输出格式 {0}。'.format(o))
@@ -285,13 +291,15 @@ for i in INPUTS:
 # generating sources for each file
 CHARDET_REPLACE = {'gb2312': 'gb18030', 'gbk': 'gb18030'}
 def detect_encoding(cnt):
-    ret = chardet.detect(cnt[0:1000])['encoding'].lower()
+    ret = chardet.detect(cnt)['encoding'].lower()
     return CHARDET_REPLACE.get(ret, ret)
 
 HIGHLIGHTS = {o:[] for o in OUTPUT}
+HIGHLIGHT_STYLES = {}
 for k in INPUTS:
     if (k not in CONTENTS or k not in LEXERS):
         continue
+    print ('正在处理 {0} ...'.format(k))
     lexer = LEXERS[k]
     cnt = CONTENTS[k]
     encoding = detect_encoding(cnt)
@@ -310,8 +318,12 @@ for k in INPUTS:
         f.linenos = False
         HIGHLIGHTS[o].append(unicode(highlight(header, lexer, f), 'utf-8'))
         # body
-        f.linenos = LINENOS and (o != CONV_TEMP)
+        f.linenos = GET_LINENOS(f) if (o != CONV_TEMP) else False
+        f.nobackground = (o == CONV_TEMP)
         HIGHLIGHTS[o].append(unicode(highlight(cnt, lexer, f), 'utf-8'))
+        # style
+        if (o not in HIGHLIGHT_STYLES and hasattr(f, 'get_style_defs')):
+            HIGHLIGHT_STYLES[o] = '\n'.join([f.get_style_defs('')])
 
 # combining outputs
 COMBINE_TEMPLATE_HTML = '''
@@ -321,39 +333,52 @@ COMBINE_TEMPLATE_HTML = '''
         <meta http-equiv="Content-Type" content="text/html;charset=utf-8;" />
         <style>
         pre {{ margin: 3px 2px; }}
+        .linenodiv {{
+            background: #eeeeee;
+            padding-right: 1px;
+            margin-right: 2px;
+            text-align: right;
+        }}
+        * {{
+            font-size: 13px;
+            font-family: WenQuanYi Micro Hei Mono, 微软雅黑, Droid Sans, DejaVu Sans Mono, monospace;
+        }}
+        {style}
         </style>
     </head>
     <body>
-        {0}
+        {body}
     </body>
 </html>
 '''.strip()
-def combine_html(outputs):
+def combine_html(outputs, path):
     ret = []
     for i in range(0, len(outputs), 2):
         ret.append('<p>{0}\n{1}</p>'.format(outputs[i], outputs[i+1]))
-    return COMBINE_TEMPLATE_HTML.format('\n<p>&nbsp;</p>\n'.join(ret))
+    return COMBINE_TEMPLATE_HTML.format(body='\n<p>&nbsp;</p>\n'.join(ret),
+                                        style=HIGHLIGHT_STYLES.get(path, ''))
 
-def combine_other(outputs):
+def combine_other(outputs, path):
     return '\n'.join(outputs)
 
 COMBINE_TABLE = {'.html': combine_html, '.htm': combine_html}
+print ('将结果写入指定的输出 ...')
 for o in OUTPUT:
     try:
         writefile(o, COMBINE_TABLE.get(os.path.splitext(o)[1].lower(),
-                                       combine_other)(HIGHLIGHTS[o]))
+                                       combine_other)(HIGHLIGHTS[o], o))
     except Exception as ex:
         print ('写入文件 {0} 失败：{1}。'.format(o, ex))
 
 # do office convert
 if (WIN32_SUPPORT and os.path.isfile(CONV_TEMP)):
-    conv_body = readfile(CONV_TEMP)
+    conv_body = unicode(readfile(CONV_TEMP), 'utf-8')
     for cv in CONV_LIST:
         try:
             html2doc(CONV_TEMP, cv)
         except Exception as ex:
             writefile(os.path.join(os.path.dirname(CONV_TEMP), cv + ".html"), conv_body)
-            print ('转换文件为 {0} 失败，保留中间文件 {0}.html：{1}。'.format(cv, ex.args[2][2].replace('\r', '')))
+            print ('转换文件为 {0} 失败，保留中间文件 {0}.html。'.format(cv))
     os.remove(CONV_TEMP)
 
 
