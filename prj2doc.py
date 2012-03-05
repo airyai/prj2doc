@@ -26,7 +26,7 @@ from pygments.util import ClassNotFound
 # templates
 ALLOW_WHITESPACE_FILTER = set(('.c', '.cpp', '.cc', '.h', '.hpp', '.cs',
                               '.vb', '.js', '.php', '.java'))
-DEFAULT_PATTERNS = ('Makefile*', '*.cpp', '*.cc', '*.hpp', '*.c', '*.h',
+DEFAULT_PATTERNS = ('makefile*', '*.cpp', '*.cc', '*.hpp', '*.c', '*.h',
                     '*.py', '*.pyw', '*.java', '*.cs', '*.vb', '*.js',
                     '*.php*')
 
@@ -101,7 +101,7 @@ def listStyles():
     
 optlist, args = getopt.getopt(sys.argv[1:], SHORT_OPT_PATTERN, LONG_OPT_PATTERN)
 OUTPUT = []
-MKPATTERN = '*Makefile*'
+MKPATTERN = '*makefile*'
 MAKEFILE = None
 STYLE = 'colorful'
 LINENOS = True
@@ -113,7 +113,7 @@ for (k, v) in optlist:
         OUTPUT.append(v)
     elif (k in ('-s', '--style=')):
         STYLE = v
-    elif (k in ('--list-style')):
+    elif (k in ('--list-style',)):
         listStyles()
         sys.exit(0)
     elif (k in ('-l', '--lineno=')):
@@ -145,14 +145,14 @@ def scan_dir(path, file_list):
         else:
             flag = True
             for pattern in FORBIDS:
-                if (fnmatch.fnmatch(p, pattern)):
+                if (fnmatch.fnmatchcase(p, pattern)):
                     flag = False
             if (not flag):
                 continue
             for pattern in PATTERNS:
-                if (fnmatch.fnmatch(p, pattern)):
+                if (fnmatch.fnmatchcase(p, pattern)):
                     file_list.append(os.path.normcase(p2))
-            if (MAKEFILE is None and fnmatch.fnmatch(p, MKPATTERN)):
+            if (MAKEFILE is None and fnmatch.fnmatchcase(p, MKPATTERN)):
                 MAKEFILE = os.path.normcase(p2)
     # then recursively scan
     for p2 in dir_list:

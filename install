@@ -1,0 +1,2 @@
+#!/bin/bash
+cp prj2doc.py /usr/local/bin/prj2doc
